@@ -5,7 +5,7 @@
   
   
   <param name="center_range" value="0.8"/>
-  <param name="map_change_range" value="1.2"/>
+  
   
   </node>
 </launch>
