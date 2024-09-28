@@ -1,0 +1,6 @@
+<launch>
+  <!-- VESC Driver -->
+  <node pkg="slamUtil" type="slamUtil" name="slamUtil">
+
+  </node>
+</launch>
