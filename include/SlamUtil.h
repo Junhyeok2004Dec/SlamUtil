@@ -46,9 +46,12 @@ protected:
     visualization_msgs::Marker pointMarker;
     visualization_msgs::MarkerArray trajectoryMarker;
 
-    int waypointCount;
-
-    int lap;
+float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
+bool isCenter; 
+bool changelap;
+bool isFirst;
+int lap;
+int waypointCount;
     
     
 };

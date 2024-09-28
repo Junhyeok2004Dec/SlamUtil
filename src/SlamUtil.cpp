@@ -12,11 +12,27 @@
 #include <slamUtil/Trajectory.h>
 
 
+#define ORIGIN_RANGE 1.0 // 1.0 중심반경
+#define DISTNACE_INTERVAL 0.5 // 0.5m 간격으로 점을 찍도록 하마......... hippo
+float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
+float distance_from_previous_position;
+bool isCenter = false; 
+bool changelap = false;
+bool isFirst = true;
+int lap = 0;
+int waypointCount = 0;
+
+geometry_msgs::Pose pose_data, previous_pose_data;
+
+
+
+
 
 SlamUtil::SlamUtil() {
 
   ros::NodeHandle node;
     
+  lap = 0;
 
   ROS_INFO("Hello");
   lap_pub = node.advertise<std_msgs::String>("/lap", 10);   
@@ -24,39 +40,89 @@ SlamUtil::SlamUtil() {
   hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);
 
   pose_sub = node.subscribe("/slam_out_pose",100, &SlamUtil::poseCallback, this);
-
-
-
-
-    lap = 0;
-    waypointCount = 0;
-
+ 
 
 }
 
 SlamUtil::~SlamUtil() {
-    lap = 0;
 
 }
 
 
 void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
+    ROS_INFO("%d", 1);
+
+    double distance, dx, dy;
 
 
-    ros::Duration(0.5).sleep();
-    geometry_msgs::Pose pose_data;
+
+
+
     pose_data = _pose.pose;
 
-    markerPublisher(pose_data);
+
+        dx = pose_data.position.x - previous_pose_data.position.x;
+        dy = pose_data.position.y - previous_pose_data.position.y;
+
+        distance = sqrt(pow(dx, 2) + pow(dy, 2));
+
+        distance_from_previous_position += distance;
+
+     
+        if(distance_from_previous_position > DISTNACE_INTERVAL)  // 거리가 일정 이상이 되면 Waypoint을 찍는 방식
+        {
+            markerPublisher(pose_data);
+            distance_from_previous_position = 0;
+        }
+
+
+     //for loop closure -> 거리 확인
+    distance_from_Origin = sqrt(
+        pow(pose_data.position.x,2) + pow(pose_data.position.y,2)
+        ); 
+
+        // 중심까지의 거리를 확인하여라!
+    if (distance_from_Origin > ORIGIN_RANGE)  isCenter = false; 
+    else isCenter = true;
+
+    if(isCenter) {
+        changelap = true;   
+    }
+
+    if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 1))) {
+        // 중심에서 벗어난 뒤 바로 실행할 경우, 경계면에서 문제 발생 -ㅣ> 경계면에서 벗어난 이후에 add lap
+        
+        changelap = false;
+        if(isFirst) {
+            isFirst = false;
+        }else {
+            lap++;
+            //changeLapAndResetMap();
+            ROS_INFO("123");
+        }      
+
+
+        
+    }
 
 
 
 
+  std_msgs::String lapData;
+
+  lapData.data = std::to_string(lap);
+  lap_pub.publish(lapData);
+
+  previous_pose_data = _pose.pose;
 
 }
 
 
 void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
+
+
+    
+
 
 
     pointMarker.header.frame_id = "map";
