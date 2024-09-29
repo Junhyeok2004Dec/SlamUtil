@@ -9,6 +9,7 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <std_msgs/String.h>
 
+
 #include <slamUtil/Trajectory.h>
 
 
@@ -22,7 +23,6 @@ bool isFirst = true;
 int lap = 0;
 int waypointCount = 0;
 
-geometry_msgs::Pose pose_data, previous_pose_data;
 
 
 
@@ -52,7 +52,7 @@ SlamUtil::~SlamUtil() {
 void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     ROS_INFO("%d", 1);
 
-    double distance, dx, dy;
+    double x,y;
 
 
 
@@ -60,25 +60,31 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
 
     pose_data = _pose.pose;
 
+    
 
-        dx = pose_data.position.x - previous_pose_data.position.x;
-        dy = pose_data.position.y - previous_pose_data.position.y;
+    x = pose_data.position.x - previous_pose_data.position.x;
+    y = pose_data.position.y - previous_pose_data.position.y;
 
-        distance = sqrt(pow(dx, 2) + pow(dy, 2));
+    double circle = sqrt(pow(x, 2) + pow(y, 2));
 
-        distance_from_previous_position += distance;
 
-     
-        if(distance_from_previous_position > DISTNACE_INTERVAL)  // 거리가 일정 이상이 되면 Waypoint을 찍는 방식
-        {
-            markerPublisher(pose_data);
-            distance_from_previous_position = 0;
-        }
+    
+    if(circle > pow(DISTNACE_INTERVAL, 2))  // 0.5m 이상 경계 외 지역에 있다면
+    {
+        markerPublisher(pose_data);
+        previous_pose_data = _pose.pose;
+    }
+
+
+    x = origin_pose.position.x - pose_data.position.x;
+    y = origin_pose.position.y - pose_data.position.y;
+
+    
 
 
      //for loop closure -> 거리 확인
     distance_from_Origin = sqrt(
-        pow(pose_data.position.x,2) + pow(pose_data.position.y,2)
+        pow(x,2) + pow(y,2)
         ); 
 
         // 중심까지의 거리를 확인하여라!
@@ -89,15 +95,19 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         changelap = true;   
     }
 
-    if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 1))) {
+    if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 0.6))) {
         // 중심에서 벗어난 뒤 바로 실행할 경우, 경계면에서 문제 발생 -ㅣ> 경계면에서 벗어난 이후에 add lap
         
         changelap = false;
         if(isFirst) {
             isFirst = false;
         }else {
-            lap++;
-            //changeLapAndResetMap();
+            
+            origin_pose.position.x = (-1) * _pose.pose.position.x;
+            origin_pose.position.y = (-1) * _pose.pose.position.y;
+            origin_pose.position.z = 0;
+            
+            changeLapAndResetMap();
             ROS_INFO("123");
         }      
 
@@ -113,17 +123,12 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
   lapData.data = std::to_string(lap);
   lap_pub.publish(lapData);
 
-  previous_pose_data = _pose.pose;
+
 
 }
 
 
 void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
-
-
-    
-
-
 
     pointMarker.header.frame_id = "map";
     pointMarker.header.stamp = ros::Time::now();
@@ -138,9 +143,9 @@ void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
 
     
 
-    pointMarker.color.r = 0.8;
+    pointMarker.color.r = 0.3;
     pointMarker.color.g = 0.1;
-    pointMarker.color.b = 0.1;
+    pointMarker.color.b = 0.9;
     pointMarker.color.a = 1.0;
     
     pointMarker.scale.x = 0.1;
@@ -156,22 +161,17 @@ void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
 
 
 void SlamUtil::changeLapAndResetMap() {
-    // lap을 증가시키고 새로운 lap에 대한 작업 수행
     lap++;
-    // 현재까지의 맵을 저장
 
-    
+    //SAVE
     std::string map_file_name = "/home/ak47/maps/map" + std::to_string(lap-1) + "";
     saveCurrentMap(map_file_name);
 
-    // Hector SLAM의 맵을 초기화하고, 새로운 lap을 시작
     
     resetSlamProcessor();
 
-
-    // 이전 lap에서 저장한 맵을 불러와서 SLAM 프로세서에 로드
+    //LOAD
     std::string load_map_file = "/home/ak47/maps/map" + std::to_string(lap-1) + ".yaml";
-
     loadPreviousMap(load_map_file);
 }
 
@@ -181,15 +181,15 @@ void SlamUtil::saveCurrentMap(const std::string& map_file_name) {
     ROS_INFO("Saving current map to %s", map_file_name.c_str());
 
     // 예시 코드: map_server를 호출하여 맵 저장
-    system(("rosrun map_server map_saver map:=/map1s -f " + map_file_name).c_str());
+    system(("rosrun map_server map_saver map:=/map -f " + map_file_name).c_str());
 }
 
 void SlamUtil::resetSlamProcessor() {
     // Hector SLAM 프로세서를 리셋하여 새로운 SLAM을 시작할 수 있도록 합니다.
     
     std_msgs::String reset;
-
     reset.data = "reset";
+    hector_msg_pub.publish(reset);
 
     //reset slam Processor
     //slamProcessor->reset();
@@ -208,5 +208,5 @@ void SlamUtil::loadPreviousMap(const std::string& map_file_name) {
 
 
     // map_server -> 직접 systemd에서 map_server을 진행한다. (LOAD)
-    system(("rosrun map_server map_server map:=/map " + map_file_name +" &").c_str());
+    system(("rosrun map_server map_server map:=/map1s " + map_file_name +" &").c_str());
 }
