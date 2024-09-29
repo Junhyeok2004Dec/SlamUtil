@@ -9,12 +9,16 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <std_msgs/String.h>
 
+#include <ackermann_msgs/AckermannDriveStamped.h>
+
 
 #include <slamUtil/Trajectory.h>
+#include <sensor_msgs/LaserScan.h>
 
 
 #define ORIGIN_RANGE 2.0 // 2.0 중심반경
 #define DISTNACE_INTERVAL 0.5 // 0.5m 간격으로 점을 찍도록 하마......... hippo
+#define DEAD_ZONE 0.3
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
 float distance_from_previous_position;
 bool isCenter = false; 
@@ -34,11 +38,14 @@ SlamUtil::SlamUtil() {
     
   lap = 0;
 
-  ROS_INFO("Hello");
   lap_pub = node.advertise<std_msgs::String>("/lap", 10);   
   marker_pub = node.advertise<visualization_msgs::MarkerArray>("/waypoint", 10);
   hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);
   center_msg_pub = node.advertise<std_msgs::String>("/origin", 10);
+  drive_pub = node.advertise<ackermann_msgs::AckermannDriveStamped>("/drive", 10);
+
+  scan_sub_ = node.subscribe("/scan", 10, &SlamUtil::scanCallback, this);
+
 
   //Todo drive pub
 
@@ -51,22 +58,47 @@ SlamUtil::SlamUtil() {
 }
 
 SlamUtil::~SlamUtil() {
+    
 
 }
 
+
+void SlamUtil::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg) {
+    // 정지코드 구현
+
+        std::vector<float> valid_ranges;
+        std::vector<float> angles;
+
+        // 유효한 범위 데이터 및 해당 각도 추출
+        for (size_t i = 0; i < scan_msg->ranges.size(); ++i) {
+            float range = scan_msg->ranges[i];
+           
+            if (range >= scan_msg->range_min && range <= scan_msg->range_max) {
+                valid_ranges.push_back(range);
+                angles.push_back(scan_msg->angle_min + i * scan_msg->angle_increment);
+
+                if (scan_msg->ranges[i] < DEAD_ZONE) {
+                    ackermann_msgs::AckermannDriveStamped stop_msg;
+                    stop_msg.drive.speed = 0.0;
+                    stop_msg.drive.steering_angle = 0.0;
+                    drive_pub.publish(stop_msg);
+            
+                
+            }
+
+            }
+
+
+        }
+
+}
 
 void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     ROS_INFO("%d", 1);
 
     double x,y;
 
-
-
-
-
     pose_data = _pose.pose;
-
-    
 
     x = pose_data.position.x - previous_pose_data.position.x;
     y = pose_data.position.y - previous_pose_data.position.y;
@@ -81,16 +113,10 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         previous_pose_data = _pose.pose;
     }
 
-
-
-
     x = origin_pose.position.x - pose_data.position.x;
     y = origin_pose.position.y - pose_data.position.y;
 
-    
-
-
-     //for loop closure -> 거리 확인
+         //for loop closure -> 거리 확인
     distance_from_Origin = sqrt(
         pow(x,2) + pow(y,2)
         ); 
@@ -110,16 +136,7 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
 
     if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 0.6))) {
         // 중심에서 벗어난 뒤 바로 실행할 경우, 경계면에서 문제 발생 -ㅣ> 경계면에서 벗어난 이후에 add lap
-        
         changelap = false;
-        if(isFirst) {
-            isFirst = false;
-            }
-            else {
-
-                
-
-
 
         std_msgs::String centerMsg;
         std::string centerString = "";
@@ -129,24 +146,17 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         centerString += std::to_string(origin_pose.position.y) ;
 
         centerMsg.data = centerString;
-        
         changeLapAndResetMap();
-     
         center_msg_pub.publish(centerMsg);
 
-    } 
+
 
     }
-
-
-
 
   std_msgs::String lapData;
 
   lapData.data = std::to_string(lap);
   lap_pub.publish(lapData);
-
-
 
 }
 
@@ -164,8 +174,6 @@ void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
     pointMarker.pose.position.x = slam_pose.position.x;
     pointMarker.pose.position.y = slam_pose.position.y;
 
-    
-
     pointMarker.color.r = 0.3;
     pointMarker.color.g = 0.1;
     pointMarker.color.b = 0.9;
@@ -175,7 +183,6 @@ void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
     pointMarker.scale.y = 0.1;
     pointMarker.scale.z = 0.1;
 
-
     trajectoryMarker.markers.push_back(pointMarker);
     marker_pub.publish(trajectoryMarker);
 
@@ -184,23 +191,22 @@ void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
 
 
 void SlamUtil::changeLapAndResetMap() {
-    lap++;
-    
-    if(isFirst) { 
-        isFirst = false;
+    if(lap == 0) {
+        lap++;
+
     } else {
+        lap++;
 
     //SAVE
     std::string map_file_name = "/home/ak47/maps/map" + std::to_string(lap-1) + "";
     saveCurrentMap(map_file_name);
 
-    
     resetSlamProcessor();
 
     //LOAD
     std::string load_map_file = "/home/ak47/maps/map" + std::to_string(lap-1) + ".yaml";
     loadPreviousMap(load_map_file);
-        }
+    }
 }
 
 void SlamUtil::saveCurrentMap(const std::string& map_file_name) {
@@ -210,7 +216,6 @@ void SlamUtil::saveCurrentMap(const std::string& map_file_name) {
 
     // 예시 코드: map_server를 호출하여 맵 저장
     system(("rosrun map_server map_saver -f map:=/map "+ map_file_name).c_str());
-
 }
 
 void SlamUtil::resetSlamProcessor() {
@@ -219,11 +224,8 @@ void SlamUtil::resetSlamProcessor() {
     std_msgs::String reset;
     //reset.data = "reset";
     //hector_msg_pub.publish(reset);
-
     //reset slam Processor
     //slamProcessor->reset();
-
-
     //ROS_INFO("%f", slamProcessor->poseInfoContainer_.getPoseStamped().pose.position.x);
     //SlamUtil::resetPose(initial_pose);
     //initial_pose_ = Eigen::Vector3f(origin_x, origin_y, steering);
@@ -234,8 +236,6 @@ void SlamUtil::loadPreviousMap(const std::string& map_file_name) {
     
     ROS_INFO("Loading previous map from %s", map_file_name.c_str());
     //system(("rosrun map_server map_server map:=/map1s " + map_file_name).c_str());
-
-
     // map_server -> 직접 systemd에서 map_server을 진행한다. (LOAD)
     system(("rosrun map_server map_server map:=/map" + std::to_string(lap) +" "+ map_file_name  +" &").c_str());
 }
