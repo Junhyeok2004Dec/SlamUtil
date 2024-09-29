@@ -7,6 +7,7 @@
 #include <slamUtil/Trajectory.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <sensor_msgs/LaserScan.h>
 
 #include <visualization_msgs/MarkerArray.h>
 #include <visualization_msgs/Marker.h>
@@ -27,6 +28,7 @@ public:
     void loadPreviousMap(const std::string& map_file_name);
     void markerPublisher(const geometry_msgs::Pose& slam_pose);
     void poseCallback(const geometry_msgs::PoseStamped& _pose);
+    void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
 protected:
     ros::NodeHandle node;
@@ -36,12 +38,15 @@ protected:
     ros::Publisher hector_msg_pub;
     ros::Publisher marker_pub; // waypoint 가시화 하기 위함
     ros::Publisher center_msg_pub;
+    ros::Publisher drive_pub;
 
     geometry_msgs::Pose pose_data, previous_pose_data, origin_pose;
     
     slamUtil::Trajectory trajectory;
 
     ros::Subscriber pose_sub;
+    ros::Subscriber scan_sub_;
+
 
     visualization_msgs::Marker pointMarker;
     visualization_msgs::MarkerArray trajectoryMarker;
