@@ -36,6 +36,9 @@ protected:
     ros::Publisher hector_msg_pub;
     ros::Publisher marker_pub; // waypoint 가시화 하기 위함
 
+    geometry_msgs::Pose pose_data, previous_pose_data, origin_pose;
+
+
 
     
     slamUtil::Trajectory trajectory;
