@@ -35,14 +35,11 @@ protected:
     ros::Publisher trajectory_pub;
     ros::Publisher hector_msg_pub;
     ros::Publisher marker_pub; // waypoint 가시화 하기 위함
+    ros::Publisher center_msg_pub;
 
     geometry_msgs::Pose pose_data, previous_pose_data, origin_pose;
-
-
-
     
     slamUtil::Trajectory trajectory;
-
 
     ros::Subscriber pose_sub;
 

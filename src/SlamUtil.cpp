@@ -13,7 +13,7 @@
 #include <slamUtil/Trajectory.h>
 
 
-#define ORIGIN_RANGE 1.0 // 1.0 중심반경
+#define ORIGIN_RANGE 2.0 // 2.0 중심반경
 #define DISTNACE_INTERVAL 0.5 // 0.5m 간격으로 점을 찍도록 하마......... hippo
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
 float distance_from_previous_position;
@@ -38,9 +38,15 @@ SlamUtil::SlamUtil() {
   lap_pub = node.advertise<std_msgs::String>("/lap", 10);   
   marker_pub = node.advertise<visualization_msgs::MarkerArray>("/waypoint", 10);
   hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);
+  center_msg_pub = node.advertise<std_msgs::String>("/origin", 10);
+
+  //Todo drive pub
 
   pose_sub = node.subscribe("/slam_out_pose",100, &SlamUtil::poseCallback, this);
  
+    origin_pose.position.x = 0;
+    origin_pose.position.y = 0;
+    origin_pose.position.z = 0;
 
 }
 
@@ -69,11 +75,13 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
 
 
     
-    if(circle > pow(DISTNACE_INTERVAL, 2))  // 0.5m 이상 경계 외 지역에 있다면
+    if(circle > 2.0 * pow(DISTNACE_INTERVAL, 2))  // 0.5m 이상 경계 외 지역에 있다면
     {
         markerPublisher(pose_data);
         previous_pose_data = _pose.pose;
     }
+
+
 
 
     x = origin_pose.position.x - pose_data.position.x;
@@ -87,6 +95,11 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         pow(x,2) + pow(y,2)
         ); 
 
+
+    origin_pose.position.x = (-1) * pose_data.position.x;
+    origin_pose.position.y = (-1) * pose_data.position.y;
+    origin_pose.position.z = 0;
+    
         // 중심까지의 거리를 확인하여라!
     if (distance_from_Origin > ORIGIN_RANGE)  isCenter = false; 
     else isCenter = true;
@@ -101,18 +114,28 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         changelap = false;
         if(isFirst) {
             isFirst = false;
-        }else {
-            
-            origin_pose.position.x = (-1) * _pose.pose.position.x;
-            origin_pose.position.y = (-1) * _pose.pose.position.y;
-            origin_pose.position.z = 0;
-            
-            changeLapAndResetMap();
-            ROS_INFO("123");
-        }      
+            }
+            else {
+
+                
 
 
+
+        std_msgs::String centerMsg;
+        std::string centerString = "";
+
+        centerString = std::to_string(origin_pose.position.x) ;
+        centerString += ",";
+        centerString += std::to_string(origin_pose.position.y) ;
+
+        centerMsg.data = centerString;
         
+        changeLapAndResetMap();
+     
+        center_msg_pub.publish(centerMsg);
+
+    } 
+
     }
 
 
@@ -162,6 +185,10 @@ void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
 
 void SlamUtil::changeLapAndResetMap() {
     lap++;
+    
+    if(isFirst) { 
+        isFirst = false;
+    } else {
 
     //SAVE
     std::string map_file_name = "/home/ak47/maps/map" + std::to_string(lap-1) + "";
@@ -173,6 +200,7 @@ void SlamUtil::changeLapAndResetMap() {
     //LOAD
     std::string load_map_file = "/home/ak47/maps/map" + std::to_string(lap-1) + ".yaml";
     loadPreviousMap(load_map_file);
+        }
 }
 
 void SlamUtil::saveCurrentMap(const std::string& map_file_name) {
@@ -181,15 +209,16 @@ void SlamUtil::saveCurrentMap(const std::string& map_file_name) {
     ROS_INFO("Saving current map to %s", map_file_name.c_str());
 
     // 예시 코드: map_server를 호출하여 맵 저장
-    system(("rosrun map_server map_saver map:=/map -f " + map_file_name).c_str());
+    system(("rosrun map_server map_saver -f map:=/map "+ map_file_name).c_str());
+
 }
 
 void SlamUtil::resetSlamProcessor() {
     // Hector SLAM 프로세서를 리셋하여 새로운 SLAM을 시작할 수 있도록 합니다.
     
     std_msgs::String reset;
-    reset.data = "reset";
-    hector_msg_pub.publish(reset);
+    //reset.data = "reset";
+    //hector_msg_pub.publish(reset);
 
     //reset slam Processor
     //slamProcessor->reset();
@@ -203,10 +232,10 @@ void SlamUtil::resetSlamProcessor() {
 
 void SlamUtil::loadPreviousMap(const std::string& map_file_name) {
     
-    ROS_INFO("[WIP] Loading previous map from %s", map_file_name.c_str());
+    ROS_INFO("Loading previous map from %s", map_file_name.c_str());
     //system(("rosrun map_server map_server map:=/map1s " + map_file_name).c_str());
 
 
     // map_server -> 직접 systemd에서 map_server을 진행한다. (LOAD)
-    system(("rosrun map_server map_server map:=/map1s " + map_file_name +" &").c_str());
+    system(("rosrun map_server map_server map:=/map" + std::to_string(lap) +" "+ map_file_name  +" &").c_str());
 }
