@@ -109,8 +109,10 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     
     if(circle > 2.0 * pow(DISTNACE_INTERVAL, 2))  // 0.5m 이상 경계 외 지역에 있다면
     {
+        if(lap < 2) {
         markerPublisher(pose_data);
         previous_pose_data = _pose.pose;
+        }
     }
 
     x = origin_pose.position.x - pose_data.position.x;
