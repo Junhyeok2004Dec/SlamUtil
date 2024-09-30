@@ -16,7 +16,7 @@
 #include <sensor_msgs/LaserScan.h>
 
 
-#define ORIGIN_RANGE 0.8 // 1.0 중심반경
+#define ORIGIN_RANGE 2.0 // 1.0 중심반경
 #define DISTNACE_INTERVAL 0.5 // 0.5m 간격으로 점을 찍도록 하마......... hippo
 #define DEAD_ZONE 0.7
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
@@ -43,7 +43,8 @@ SlamUtil::SlamUtil() {
   hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);
   center_msg_pub = node.advertise<std_msgs::String>("/origin", 10);
   drive_pub = node.advertise<ackermann_msgs::AckermannDriveStamped>("/drive", 10);
-
+  pose_pub = node.advertise<geometry_msgs::PoseStamped>("/slam_out_pose", 100);
+  
   scan_sub_ = node.subscribe("/scan", 10, &SlamUtil::scanCallback, this);
 
 
@@ -114,6 +115,8 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         previous_marker_pose_data = _pose.pose;
         }
     }
+    
+    previous_lap_pose_data = _pose.pose;
 
     x = origin_pose.position.x - previous_lap_pose_data.position.x;
     y = origin_pose.position.y - previous_lap_pose_data.position.y;
@@ -124,10 +127,12 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         ); 
 
 
-    origin_pose.position.x = (-1) * pose_data.position.x;
+    origin_pose.position.x = (-1)* pose_data.position.x;
     origin_pose.position.y = (-1) * pose_data.position.y;
     origin_pose.orientation.w = pose_data.orientation.w;
     origin_pose.position.z = 0;
+    
+
     
         // 중심까지의 거리를 확인하여라!
     if (distance_from_Origin > ORIGIN_RANGE)  isCenter = false; 
@@ -139,6 +144,7 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
 
     if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 0.6))) {
      
+     	
         changelap = false;
 
 	previous_lap_pose_data = _pose.pose;
@@ -153,6 +159,7 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         centerMsg.data = centerString;
         changeLapAndResetMap();
         center_msg_pub.publish(centerMsg);
+        pose_pub.publish(_pose); // load orientation before map refresh
 
 
 
@@ -207,7 +214,7 @@ void SlamUtil::changeLapAndResetMap() {
     std::string map_file_name = "/home/user/maps/mapPrev";
     saveCurrentMap(map_file_name);
 
-    resetSlamProcessor();
+    //resetSlamProcessor();
 
     //LOAD
     //std::string load_map_file = "/home/user/maps/map" + std::to_string(lap-1) + ".yaml";
