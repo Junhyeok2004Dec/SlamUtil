@@ -36,11 +36,12 @@ protected:
     ros::Publisher lap_pub; // 몇 번쨰 lap인지 확인하기 위함
     ros::Publisher trajectory_pub;
     ros::Publisher hector_msg_pub;
+    ros::Publisher pose_pub; 
     ros::Publisher marker_pub; // waypoint 가시화 하기 위함
     ros::Publisher center_msg_pub;
     ros::Publisher drive_pub;
 
-    geometry_msgs::Pose pose_data, previous_pose_data, origin_pose;
+    geometry_msgs::Pose pose_data, previous_marker_pose_data, origin_pose, previous_lap_pose_data;
     
     slamUtil::Trajectory trajectory;
 

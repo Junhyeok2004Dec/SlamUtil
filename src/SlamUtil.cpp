@@ -16,9 +16,9 @@
 #include <sensor_msgs/LaserScan.h>
 
 
-#define ORIGIN_RANGE 2.0 // 2.0 중심반경
+#define ORIGIN_RANGE 0.8 // 1.0 중심반경
 #define DISTNACE_INTERVAL 0.5 // 0.5m 간격으로 점을 찍도록 하마......... hippo
-#define DEAD_ZONE 0.3
+#define DEAD_ZONE 0.7
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
 float distance_from_previous_position;
 bool isCenter = false; 
@@ -51,9 +51,9 @@ SlamUtil::SlamUtil() {
 
   pose_sub = node.subscribe("/slam_out_pose",100, &SlamUtil::poseCallback, this);
  
-    origin_pose.position.x = 0;
-    origin_pose.position.y = 0;
-    origin_pose.position.z = 0;
+  origin_pose.position.x = 0;
+  origin_pose.position.y = 0;
+  origin_pose.position.z = 0;
 
 }
 
@@ -100,8 +100,8 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
 
     pose_data = _pose.pose;
 
-    x = pose_data.position.x - previous_pose_data.position.x;
-    y = pose_data.position.y - previous_pose_data.position.y;
+    x = pose_data.position.x - previous_marker_pose_data.position.x;
+    y = pose_data.position.y - previous_marker_pose_data.position.y;
 
     double circle = sqrt(pow(x, 2) + pow(y, 2));
 
@@ -111,12 +111,12 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     {
         if(lap < 2) {
         markerPublisher(pose_data);
-        previous_pose_data = _pose.pose;
+        previous_marker_pose_data = _pose.pose;
         }
     }
 
-    x = origin_pose.position.x - pose_data.position.x;
-    y = origin_pose.position.y - pose_data.position.y;
+    x = origin_pose.position.x - previous_lap_pose_data.position.x;
+    y = origin_pose.position.y - previous_lap_pose_data.position.y;
 
          //for loop closure -> 거리 확인
     distance_from_Origin = sqrt(
@@ -126,6 +126,7 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
 
     origin_pose.position.x = (-1) * pose_data.position.x;
     origin_pose.position.y = (-1) * pose_data.position.y;
+    origin_pose.orientation.w = pose_data.orientation.w;
     origin_pose.position.z = 0;
     
         // 중심까지의 거리를 확인하여라!
@@ -137,9 +138,11 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     }
 
     if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 0.6))) {
-        // 중심에서 벗어난 뒤 바로 실행할 경우, 경계면에서 문제 발생 -ㅣ> 경계면에서 벗어난 이후에 add lap
+     
         changelap = false;
 
+	previous_lap_pose_data = _pose.pose;
+	
         std_msgs::String centerMsg;
         std::string centerString = "";
 
@@ -200,13 +203,15 @@ void SlamUtil::changeLapAndResetMap() {
         lap++;
 
     //SAVE
-    std::string map_file_name = "/home/ak47/maps/map" + std::to_string(lap-1) + "";
+    //std::string map_file_name = "/home/user/maps/map" + std::to_string(lap-1) + "";
+    std::string map_file_name = "/home/user/maps/mapPrev";
     saveCurrentMap(map_file_name);
 
     resetSlamProcessor();
 
     //LOAD
-    std::string load_map_file = "/home/ak47/maps/map" + std::to_string(lap-1) + ".yaml";
+    //std::string load_map_file = "/home/user/maps/map" + std::to_string(lap-1) + ".yaml";
+    std::string load_map_file = "/home/user/maps/mapPrev.yaml";
     loadPreviousMap(load_map_file);
     }
 }
@@ -224,8 +229,8 @@ void SlamUtil::resetSlamProcessor() {
     // Hector SLAM 프로세서를 리셋하여 새로운 SLAM을 시작할 수 있도록 합니다.
     
     std_msgs::String reset;
-    //reset.data = "reset";
-    //hector_msg_pub.publish(reset);
+    reset.data = "reset";
+    hector_msg_pub.publish(reset);
     //reset slam Processor
     //slamProcessor->reset();
     //ROS_INFO("%f", slamProcessor->poseInfoContainer_.getPoseStamped().pose.position.x);
@@ -239,5 +244,5 @@ void SlamUtil::loadPreviousMap(const std::string& map_file_name) {
     ROS_INFO("Loading previous map from %s", map_file_name.c_str());
     //system(("rosrun map_server map_server map:=/map1s " + map_file_name).c_str());
     // map_server -> 직접 systemd에서 map_server을 진행한다. (LOAD)
-    system(("rosrun map_server map_server map:=/map" + std::to_string(lap) +" "+ map_file_name  +" &").c_str());
+    system(("rosrun map_server map_server map:=/mapOK " + map_file_name  +" &").c_str());
 }
