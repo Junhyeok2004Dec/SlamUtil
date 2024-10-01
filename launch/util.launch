@@ -4,8 +4,10 @@
   <node pkg="slamUtil" type="slamUtil" name="slamUtil">
   
   
-  <param name="center_range" value="0.8"/>
-  <param name="map_change_range" value="1.2"/>
+  <param name="ORIGIN_RANGE" value="0.8"/>
+  <param name="MAP_CHANGE_RANGE" value="1.2"/>
+  <param name="DEAD_ZONE" value="0.6"/>
+  <param name="DISTNACE_INTERVAL" value="0.5"/>
   
   </node>
 </launch>

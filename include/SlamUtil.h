@@ -28,6 +28,7 @@ public:
     void loadPreviousMap(const std::string& map_file_name);
     void markerPublisher(const geometry_msgs::Pose& slam_pose);
     void poseCallback(const geometry_msgs::PoseStamped& _pose);
+    void trajectoryListPublisher(const geometry_msgs::Pose& _pose);
     void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
 protected:
@@ -40,6 +41,7 @@ protected:
     ros::Publisher marker_pub; // waypoint 가시화 하기 위함
     ros::Publisher center_msg_pub;
     ros::Publisher drive_pub;
+    ros::Publisher trajectoryList_pub;
 
     geometry_msgs::Pose pose_data, previous_marker_pose_data, origin_pose, previous_lap_pose_data;
     

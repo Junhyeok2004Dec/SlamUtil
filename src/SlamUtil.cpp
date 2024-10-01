@@ -13,12 +13,15 @@
 
 
 #include <slamUtil/Trajectory.h>
+#include <slamUtil/Position.h>
 #include <sensor_msgs/LaserScan.h>
 
 
-#define ORIGIN_RANGE 2.0 // 1.0 중심반경
-#define DISTNACE_INTERVAL 0.5 // 0.5m 간격으로 점을 찍도록 하마......... hippo
-#define DEAD_ZONE 0.7
+double ORIGIN_RANGE = 2.0;// 1.0 중심반경
+double DISTNACE_INTERVAL = 0.5; // 0.5m 간격으로 점을 찍도록 하마......... hippo
+double DEAD_ZONE = 0.7;
+double MAP_CHANGE_RANGE = 0.6;
+
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
 float distance_from_previous_position;
 bool isCenter = false; 
@@ -34,13 +37,17 @@ int waypointCount = 0;
 
 SlamUtil::SlamUtil() {
 
+
+
   ros::NodeHandle node;
     
   lap = 0;
 
   lap_pub = node.advertise<std_msgs::String>("/lap", 10);   
-  marker_pub = node.advertise<visualization_msgs::MarkerArray>("/waypoint", 10);
-  hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);
+  marker_pub = node.advertise<slamUtil::Trajectory>("/trajectoryMarker", 10);
+  trajectoryList_pub = node.advertise<slamUtil::Trajectory>("/trajectoryList", 100);
+
+  hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);  
   center_msg_pub = node.advertise<std_msgs::String>("/origin", 10);
   drive_pub = node.advertise<ackermann_msgs::AckermannDriveStamped>("/drive", 10);
   pose_pub = node.advertise<geometry_msgs::PoseStamped>("/slam_out_pose", 100);
@@ -56,7 +63,17 @@ SlamUtil::SlamUtil() {
   origin_pose.position.y = 0;
   origin_pose.position.z = 0;
 
+
+  float ORIGIN_RANGE, DISTNACE_INTERVAL, DEAD_ZONE, MAP_CHANGE_RANGE;
+
+  node.getParam("ORIGIN_RANGE", ORIGIN_RANGE);
+  node.getParam("DISTNACE_INTERVAL", DISTNACE_INTERVAL);
+  node.getParam("DEAD_ZONE", DEAD_ZONE);
+  node.getParam("MAP_CHANGE_RANGE", MAP_CHANGE_RANGE);
+  
+
 }
+
 
 SlamUtil::~SlamUtil() {
     
@@ -111,6 +128,7 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     if(circle > 2.0 * pow(DISTNACE_INTERVAL, 2))  // 0.5m 이상 경계 외 지역에 있다면
     {
         if(lap < 2) {
+            
         markerPublisher(pose_data);
         previous_marker_pose_data = _pose.pose;
         }
@@ -142,7 +160,7 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
         changelap = true;   
     }
 
-    if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + 0.6))) {
+    if(!isCenter && (changelap && ( distance_from_Origin > ORIGIN_RANGE + MAP_CHANGE_RANGE))) {
      
      	
         changelap = false;
@@ -166,12 +184,35 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
     }
 
   std_msgs::String lapData;
-
   lapData.data = std::to_string(lap);
+
+  if(lap == 0) {
+  lapData.data = "1"; // 0번째 lap 또한 1번째 바퀴이므로 1번째로 publish하도록 통일
+
+  }
   lap_pub.publish(lapData);
 
 }
 
+int trajectoryCount = 0;
+void SlamUtil::trajectoryListPublisher(const geometry_msgs::Pose& _pose)
+{
+    slamUtil::Trajectory trajectoryList;
+    slamUtil::Position position; 
+
+    // 현재 위치 좌표를 설정
+    position.x = _pose.position.x;
+    position.y = _pose.position.y;
+
+    // Trajectory 메시지에 좌표를 추가
+    trajectoryList.position.push_back(position);
+
+    // Trajectory 메시지의 ID 설정
+    trajectoryList.id = trajectoryCount++;
+
+    // Trajectory 메시지를 publish
+    trajectoryList_pub.publish(trajectoryList);
+}
 
 void SlamUtil::markerPublisher(const geometry_msgs::Pose& slam_pose) {
 
