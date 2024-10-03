@@ -30,6 +30,8 @@ public:
     void poseCallback(const geometry_msgs::PoseStamped& _pose);
     void trajectoryListPublisher(const geometry_msgs::Pose& _pose);
     void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
+    void saveToCsv(const std::string& filePath, const std::vector<std::string>& data);
+    void eraseFile(const std::string& filePath);
 
 protected:
     ros::NodeHandle node;
@@ -54,12 +56,20 @@ protected:
     visualization_msgs::Marker pointMarker;
     visualization_msgs::MarkerArray trajectoryMarker;
 
+    std::vector<std::string> csvData;
+
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
 bool isCenter; 
 bool changelap;
 bool isFirst;
 int lap;
 int waypointCount;
+
+double ORIGIN_RANGE;// 1.0 중심반경
+double DISTNACE_INTERVAL; // 0.5m 간격으로 점을 찍도록 하마......... hippo
+double DEAD_ZONE;
+double MAP_CHANGE_RANGE;
+
     
     
 };

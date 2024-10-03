@@ -17,10 +17,6 @@
 #include <sensor_msgs/LaserScan.h>
 
 
-double ORIGIN_RANGE = 2.0;// 1.0 중심반경
-double DISTNACE_INTERVAL = 0.5; // 0.5m 간격으로 점을 찍도록 하마......... hippo
-double DEAD_ZONE = 0.7;
-double MAP_CHANGE_RANGE = 0.6;
 
 float distance_from_Origin; // 초기 지점과의 거리 -> used loop closure
 float distance_from_previous_position;
@@ -31,7 +27,31 @@ int lap = 0;
 int waypointCount = 0;
 
 
+void SlamUtil::eraseFile(const std::string& filePath) {
+    system(("rm -r " + filePath + "test.csv").c_str());
 
+}
+void SlamUtil::saveToCsv(const std::string& filePath, const std::vector<std::string>& data) {
+
+    std::fstream outFile(filePath, std::ios::app);
+
+    if (!outFile.is_open()) {
+        std::cerr << "Error: Unable to open file " << filePath << std::endl;
+        return;
+    }
+
+
+    for (size_t i = 0; i < data.size(); ++i) {
+        outFile << data[i];
+        if (i != data.size() - 1) { 
+            outFile << ",";
+        }
+    }
+    outFile << std::endl; // EOL
+
+
+outFile.close();
+}
 
 
 
@@ -41,15 +61,24 @@ SlamUtil::SlamUtil() {
 
   ros::NodeHandle node;
     
+  system(("mkdir ~/maps/waypoint"));
+  eraseFile("/home/ak47/maps/waypoint/");
+
+  node.getParam("/slamUtil/ORIGIN_RANGE", ORIGIN_RANGE);
+  node.getParam("/slamUtil/DISTNACE_INTERVAL", DISTNACE_INTERVAL);
+  node.getParam("/slamUtil/MAP_CHANGE_RANGE", DEAD_ZONE);
+  node.getParam("/slamUtil/ORIGIN_RANGE", MAP_CHANGE_RANGE);
+
+
   lap = 0;
 
   lap_pub = node.advertise<std_msgs::String>("/lap", 10);   
-  marker_pub = node.advertise<slamUtil::Trajectory>("/trajectoryMarker", 10);
-  trajectoryList_pub = node.advertise<slamUtil::Trajectory>("/trajectoryList", 100);
-
-  hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 10);  
-  center_msg_pub = node.advertise<std_msgs::String>("/origin", 10);
-  drive_pub = node.advertise<ackermann_msgs::AckermannDriveStamped>("/drive", 10);
+  marker_pub = node.advertise<visualization_msgs::MarkerArray>("/trajectoryMarker", 10);
+  trajectoryList_pub = node.advertise<slamUtil::Trajectory>("/trajectoryList", 10);
+        
+  hector_msg_pub = node.advertise<std_msgs::String>("syscommand", 100);  
+  center_msg_pub = node.advertise<std_msgs::String>("/origin", 100);
+  drive_pub = node.advertise<ackermann_msgs::AckermannDriveStamped>("/drive", 100);
   pose_pub = node.advertise<geometry_msgs::PoseStamped>("/slam_out_pose", 100);
   
   scan_sub_ = node.subscribe("/scan", 10, &SlamUtil::scanCallback, this);
@@ -60,16 +89,12 @@ SlamUtil::SlamUtil() {
   pose_sub = node.subscribe("/slam_out_pose",100, &SlamUtil::poseCallback, this);
  
   origin_pose.position.x = 0;
-  origin_pose.position.y = 0;
+  origin_pose.position.y = 0;       
   origin_pose.position.z = 0;
 
 
   float ORIGIN_RANGE, DISTNACE_INTERVAL, DEAD_ZONE, MAP_CHANGE_RANGE;
 
-  node.getParam("ORIGIN_RANGE", ORIGIN_RANGE);
-  node.getParam("DISTNACE_INTERVAL", DISTNACE_INTERVAL);
-  node.getParam("DEAD_ZONE", DEAD_ZONE);
-  node.getParam("MAP_CHANGE_RANGE", MAP_CHANGE_RANGE);
   
 
 }
@@ -95,7 +120,8 @@ void SlamUtil::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg) {
                 valid_ranges.push_back(range);
                 angles.push_back(scan_msg->angle_min + i * scan_msg->angle_increment);
 
-                if (scan_msg->ranges[i] < DEAD_ZONE) {
+                //if (scan_msg->ranges[i] < DEAD_ZONE) {
+                if(false) { // 임시 제거 - cjh / 241003
                     ackermann_msgs::AckermannDriveStamped stop_msg;
                     stop_msg.drive.speed = 0.0;
                     stop_msg.drive.steering_angle = 0.0;
@@ -131,6 +157,20 @@ void SlamUtil::poseCallback(const geometry_msgs::PoseStamped& _pose) {
             
         markerPublisher(pose_data);
         previous_marker_pose_data = _pose.pose;
+ 
+        csvData.push_back(std::to_string(_pose.pose.position.x));
+        csvData.push_back(std::to_string(_pose.pose.position.y));
+        csvData.push_back(std::to_string(lap));
+
+
+        saveToCsv("/home/ak47/maps/waypoint/test.csv", csvData);
+
+
+        
+        csvData.erase(csvData.begin() + 0);
+        csvData.erase(csvData.begin() + 1);
+        csvData.erase(csvData.begin() + 2); // data 초기화
+
         }
     }
     
@@ -248,18 +288,18 @@ void SlamUtil::changeLapAndResetMap() {
         lap++;
 
     } else {
-        lap++;
+    lap++;
 
     //SAVE
     //std::string map_file_name = "/home/user/maps/map" + std::to_string(lap-1) + "";
-    std::string map_file_name = "/home/user/maps/mapPrev";
+    std::string map_file_name = "/home/ak47/maps/mapPrev" + std::to_string(lap-1) + "";
     saveCurrentMap(map_file_name);
 
     //resetSlamProcessor();
 
     //LOAD
     //std::string load_map_file = "/home/user/maps/map" + std::to_string(lap-1) + ".yaml";
-    std::string load_map_file = "/home/user/maps/mapPrev.yaml";
+    std::string load_map_file = "/home/ak47/maps/mapPrev"+ std::to_string(lap-1) +".yaml";
     loadPreviousMap(load_map_file);
     }
 }
